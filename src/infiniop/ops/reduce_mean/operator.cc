@@ -1,40 +1,126 @@
-#include "reduceMean.h"
-#include "devices/reduceMean_cuda.h"
-#include "devices/reduceMean_mxdc.h"
-#include "devices/reduceMean_tianshu.h"
+#include "../../operator.h"
+#include "../../handle.h"
+#include "infiniop/ops/reduce_mean.h"
 
-infiniStatus_t reduceMean(
-    infiniTensorDescriptor_t input,
-    infiniTensorDescriptor_t output,
-    size_t dim
-) {
-    // 校验输入有效性
-    if (dim >= input->shape.size()) {
-        return INFINI_ERROR_INVALID_DIM;
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#include "nvidia/reduce_mean_nvidia.cuh"
+#endif
+#ifdef ENABLE_METAX_API
+#include "metax/reduce_mean_metax.h"
+#endif
+
+__C infiniStatus_t infiniopCreateReduceMeanDescriptor(
+    infiniopHandle_t handle,
+    infiniopReduceMeanDescriptor_t *desc_ptr,
+    infiniopTensorDescriptor_t output_desc,
+    infiniopTensorDescriptor_t input_desc,
+    const int *axes,
+    int num_axes,
+    int keep_dims) {
+
+#define CREATE(CASE, NAMESPACE)                                                \
+    case CASE:                                                                 \
+        return op::reduce_mean::NAMESPACE::Descriptor::create(                 \
+            handle,                                                            \
+            reinterpret_cast<op::reduce_mean::NAMESPACE::Descriptor **>(desc_ptr), \
+            output_desc,                                                       \
+            input_desc,                                                        \
+            axes,                                                              \
+            num_axes,                                                          \
+            keep_dims)
+
+    switch (handle->device) {
+
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia); // 复用 NVIDIA CUDA 内核
+#endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
+
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    
-    // 校验输出形状
-    if (input->shape.size() != output->shape.size()) {
-        return INFINI_ERROR_DEVICE_MISMATCH;
+
+#undef CREATE
+}
+
+__C infiniStatus_t infiniopGetReduceMeanWorkspaceSize(
+    infiniopReduceMeanDescriptor_t desc, size_t *size) {
+
+#define GET(CASE, NAMESPACE)                                                               \
+    case CASE:                                                                             \
+        *size = reinterpret_cast<op::reduce_mean::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
+        return INFINI_STATUS_SUCCESS
+
+    switch (desc->device_type) {
+#ifdef ENABLE_NVIDIA_API
+        GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
+#endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    for (size_t i = 0; i < input->shape.size(); i++) {
-        if (i != dim && input->shape[i] != output->shape[i]) {
-            return INFINI_ERROR_DEVICE_MISMATCH;
-        }
+#undef GET
+}
+
+__C infiniStatus_t infiniopReduceMean(
+    infiniopReduceMeanDescriptor_t desc,
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    const void *input,
+    void *stream) {
+
+#define CALCULATE(CASE, NAMESPACE)                                               \
+    case CASE:                                                                   \
+        return reinterpret_cast<const op::reduce_mean::NAMESPACE::Descriptor *>(desc) \
+            ->calculate(workspace, workspace_size, output, {input}, stream)
+
+    switch (desc->device_type) {
+#ifdef ENABLE_NVIDIA_API
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    if (output->shape[dim] != 1) {
-        return INFINI_ERROR_DEVICE_MISMATCH;
+#undef CALCULATE
+}
+
+__C infiniStatus_t infiniopDestroyReduceMeanDescriptor(
+    infiniopReduceMeanDescriptor_t desc) {
+
+#define DELETE(CASE, NAMESPACE)                                                  \
+    case CASE:                                                                   \
+        delete reinterpret_cast<const op::reduce_mean::NAMESPACE::Descriptor *>(desc); \
+        return INFINI_STATUS_SUCCESS
+
+    switch (desc->device_type) {
+#ifdef ENABLE_NVIDIA_API
+        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    
-    // 设备路由
-    switch(input->deviceType) {
-        case INFINI_DEVICE_CUDA:
-            return reduceMean_cuda(input, output, dim);
-        case INFINI_DEVICE_MXDC:
-            return reduceMean_mxdc(input, output, dim);
-        case INFINI_DEVICE_TIANSHU:
-            return reduceMean_tianshu(input, output, dim);
-        default:
-            return INFINI_ERROR_PLATFORM_NOT_SUPPORTED;
-    }
+#undef DELETE
 }

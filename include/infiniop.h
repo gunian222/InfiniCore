@@ -17,7 +17,7 @@
 #include "infiniop/ops/sub.h"
 #include "infiniop/ops/swiglu.h"
 #include "infiniop/tensor_descriptor.h"
-#include "include/infiniop/reduce_mean.h"
-#include "include/infiniop/infiniCore.h"
+#include "infiniop/reduce_mean.h"
+
 
 #endif // __INFINIOP_API_H__
