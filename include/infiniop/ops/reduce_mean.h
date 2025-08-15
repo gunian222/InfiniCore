@@ -1,7 +1,7 @@
 #ifndef __INFINIOP_REDUCEMEAN_API_H__
 #define __INFINIOP_REDUCEMEAN_API_H__
 
-#include "../infinicore.h"
+#include "../operator_descriptor.h"
 
 
 typedef struct InfiniopDescriptor *infiniopReduceMeanDescriptor_t;
