@@ -1,7 +1,6 @@
 #ifndef __REDUCE_MAX_TIANSHU_H__
 #define __REDUCE_MAX_TIANSHU_H__
-
-#include "../../../reduce/tianshu/reduce_tianshu_api.h"
+#include "reduce_max.h"
 
 REDUCE_DESCRIPTOR(reduce_max, tianshu)
 

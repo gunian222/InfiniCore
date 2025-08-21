@@ -489,3 +489,37 @@ def conv_(lib):
     lib.infiniopDestroyConvDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+@OpRegister.operator
+def reduce_max_(lib):
+    # 1. 创建 ReduceMax 描述符
+    lib.infiniopCreateReduceMaxDescriptor.restype = c_int32
+    lib.infiniopCreateReduceMaxDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,   # 输出
+        infiniopTensorDescriptor_t,   # 输入
+    ]
+
+    # 2. 查询 ReduceMax 需要的 workspace
+    lib.infiniopGetReduceMaxWorkspaceSize.restype = c_int32
+    lib.infiniopGetReduceMaxWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    # 3. 执行 ReduceMax
+    lib.infiniopReduceMax.restype = c_int32
+    lib.infiniopReduceMax.argtypes = [
+        infiniopOperatorDescriptor_t,  # 算子描述符
+        c_void_p,                      # workspace
+        c_size_t,                      # workspace size
+        c_void_p,                      # 输出
+        c_void_p,                      # 输入
+        c_void_p,                      # stream (CUDA/HIP/其他)
+    ]
+
+    
+    lib.infiniopDestroyReduceMaxDescriptor.restype = c_int32
+    lib.infiniopDestroyReduceMaxDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]

@@ -1,7 +1,7 @@
 #ifndef __REDUCE_MAX_NVIDIA_CUH__
 #define __REDUCE_MAX_NVIDIA_CUH__
 
-#include "../../../reduce/nvidia/reduce_nvidia_api.cuh"
+#include "reduce_max.h"
 
 REDUCE_DESCRIPTOR(reduce_max, nvidia)
 

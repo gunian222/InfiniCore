@@ -1,8 +1,8 @@
 #ifndef __REDUCE_MAX_MOXI_H__
 #define __REDUCE_MAX_MOXI_H__
 
-#include "../../../reduce/moxi/reduce_moxi_api.h"
-#include "mxi_runtime.h"
+#include "reduce_max.h"
+
 
 REDUCE_DESCRIPTOR(reduce_max, moxi)
 
