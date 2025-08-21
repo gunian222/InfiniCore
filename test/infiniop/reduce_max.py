@@ -1,3 +1,7 @@
+import torch
+import ctypes
+from ctypes import c_uint64
+
 def test_reduce_max(
     handle,
     device,
