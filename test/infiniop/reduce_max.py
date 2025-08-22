@@ -1,6 +1,16 @@
 import torch
 import ctypes
 from ctypes import c_uint64
+import argparse  # 导入argparse模块
+
+def get_args():
+    parser = argparse.ArgumentParser(description='测试reduce max算子')
+    # 根据需要添加命令行参数
+    parser.add_argument('--devices', type=str, default=None, 
+                      help='指定测试设备，用逗号分隔')
+    parser.add_argument('--verbose', action='store_true', 
+                      help='显示详细测试信息')
+    return parser.parse_args()
 
 def test_reduce_max(
     handle,
@@ -62,7 +72,7 @@ def test_reduce_max(
     check_error(LIBINFINIOP.infiniopDestroyReduceMaxDescriptor(descriptor))
 
 if __name__ == "__main__":
-    args = get_args()
+    args = get_args()  # 现在这个函数已经定义
     # 测试用例覆盖不同形状和轴
     test_cases = [
         ((2, 3, 4), (0,), True),
