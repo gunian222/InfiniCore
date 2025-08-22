@@ -1,16 +1,51 @@
 import torch
 import ctypes
 from ctypes import c_uint64
-import argparse  # 导入argparse模块
+import argparse
 
 def get_args():
+    """解析命令行参数"""
     parser = argparse.ArgumentParser(description='测试reduce max算子')
-    # 根据需要添加命令行参数
     parser.add_argument('--devices', type=str, default=None, 
-                      help='指定测试设备，用逗号分隔')
+                      help='指定测试设备，用逗号分隔 (例如: cuda:0,tianshu:1)')
     parser.add_argument('--verbose', action='store_true', 
                       help='显示详细测试信息')
     return parser.parse_args()
+
+def get_test_devices(args, include_nvidia=True, include_tianshu=True, include_moxi=True):
+   
+    devices = []
+    
+    # 如果指定了设备，则优先使用指定的设备
+    if args.devices:
+        return args.devices.split(',')
+    
+    # 自动检测支持的设备
+    if include_nvidia and torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            devices.append(f"cuda:{i}")
+    
+   
+    if include_tianshu:
+        # 这里应该是天枢设备的检测逻辑
+        try:
+            # 尝试检测天枢设备的示例代码
+            devices.append("tianshu:0")  # 假设存在天枢设备0
+        except:
+            pass
+    
+    if include_moxi:
+        # 这里应该是摩西设备的检测逻辑
+        try:
+            # 尝试检测摩西设备的示例代码
+            devices.append("moxi:0")  # 假设存在摩西设备0
+        except:
+            pass
+    
+    if not devices:
+        raise RuntimeError("没有找到可用的测试设备")
+    
+    return devices
 
 def test_reduce_max(
     handle,
@@ -72,7 +107,7 @@ def test_reduce_max(
     check_error(LIBINFINIOP.infiniopDestroyReduceMaxDescriptor(descriptor))
 
 if __name__ == "__main__":
-    args = get_args()  # 现在这个函数已经定义
+    args = get_args()
     # 测试用例覆盖不同形状和轴
     test_cases = [
         ((2, 3, 4), (0,), True),
@@ -83,3 +118,4 @@ if __name__ == "__main__":
     for device in get_test_devices(args, include_nvidia=True, include_tianshu=True, include_moxi=True):
         test_operator(device, test_reduce_max, test_cases, [torch.float16, torch.float32])
     print("\033[92mAll tests passed!\033[0m")
+    
