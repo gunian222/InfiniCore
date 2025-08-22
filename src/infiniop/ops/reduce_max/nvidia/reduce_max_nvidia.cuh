@@ -9,7 +9,7 @@ namespace op::reduce_max::nvidia {
 typedef struct ReduceMaxOp {
 public:
     static constexpr int num_inputs = 1;
-    // 最大值规约操作
+
     template <typename T>
     inline __device__ T operator()(const T &a, const T &b) const {
         return max(a, b);
