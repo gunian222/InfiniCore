@@ -45,11 +45,10 @@ T launch_reduce_max(const T* d_input, size_t N, cudaStream_t stream = 0) {
     cudaMalloc(&d_intermediate, blocks * sizeof(T));
 
     ReduceMaxOp op{};
-
-    // 第一次规约
+    
     reduce_max_kernel<<<blocks, threads, threads * sizeof(T), stream>>>(d_input, d_intermediate, N, op);
 
-    // 继续规约直到只剩 1 个 block
+   
     int s = blocks;
     while (s > 1) {
         int threads2 = (s > 256) ? 256 : s;

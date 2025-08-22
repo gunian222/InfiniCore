@@ -36,12 +36,19 @@ std::shared_ptr<infiniop_test::Result> Test::run(
     infiniopReduceMaxDescriptor_t op_desc;
     auto x = _attributes->x->to(device, device_id);
     auto y = _attributes->y->to(device, device_id);
+// 从测试属性中获取归约参数（假设_attributes包含axes、num_axes、keep_dims）
+const int* axes = _attributes->axes.data();
+int num_axes = _attributes->num_axes;
+int keep_dims = _attributes->keep_dims;
 
-    CHECK_OR(infiniopCreateReduceMaxDescriptor(handle, &op_desc,
-                                               y->desc(),
-                                               x->desc()),
-             return TEST_FAILED(OP_CREATION_FAILED,
-                                "Failed to create reduce_max descriptor."));
+CHECK_OR(infiniopCreateReduceMaxDescriptor(handle, &op_desc,
+                                           y->desc(),
+                                           x->desc(),
+                                           axes,  // 补充归约维度
+                                           num_axes,  // 补充维度数量
+                                           keep_dims),  // 补充是否保留维度
+         return TEST_FAILED(OP_CREATION_FAILED,
+                            "Failed to create reduce_max descriptor."));
 
     size_t workspace_size;
     CHECK_OR(infiniopGetReduceMaxWorkspaceSize(op_desc, &workspace_size),
@@ -74,6 +81,10 @@ std::shared_ptr<infiniop_test::Result> Test::run(
                               nullptr);
         },
         warm_ups, iterations);
+    if (workspace != nullptr) {
+    infinirtFree(workspace);
+}
+    infiniopDestroyReduceMaxDescriptor(op_desc);  // 销毁算子描述符
 
     return TEST_PASSED(elapsed_time);
 }

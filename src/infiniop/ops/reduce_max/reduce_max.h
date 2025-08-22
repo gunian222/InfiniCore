@@ -24,12 +24,14 @@
     public:                                                         \
         ~Descriptor();                                              \
                                                                      \
-        static infiniStatus_t create(                               \
-            infiniopHandle_t handle,                                \
-            Descriptor **desc_ptr,                                  \
-            infiniopTensorDescriptor_t y_desc,                      \
-            infiniopTensorDescriptor_t x_desc,                      \
-            int reduce_dim); /* 新增参数：指定 reduce 的维度 */      \
+        static infiniStatus_t create(
+            infiniopHandle_t handle,
+            Descriptor **desc_ptr,
+            infiniopTensorDescriptor_t y_desc,
+            infiniopTensorDescriptor_t x_desc,
+            const int* axes,  // 正确参数：归约维度数组
+            int num_axes,     // 正确参数：维度数量
+            int keep_dims);   // 正确参数：是否保留维度    
                                                                      \
         infiniStatus_t calculate(                                   \
             void *y,                                                \
