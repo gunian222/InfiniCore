@@ -1,121 +1,147 @@
 import torch
 import ctypes
 from ctypes import c_uint64
-import argparse
+from libinfiniop import (
+    LIBINFINIOP,
+    TestTensor,
+    get_test_devices,
+    check_error,
+    test_operator,
+    get_args,
+    debug,
+    get_tolerance,
+    profile_operation,
+    TestWorkspace,
+    InfiniDtype,
+    InfiniDtypeNames,
+    InfiniDeviceNames,
+    infiniopOperatorDescriptor_t,
+)
+from enum import Enum, auto
 
-def get_args():
-    """解析命令行参数"""
-    parser = argparse.ArgumentParser(description='测试reduce max算子')
-    parser.add_argument('--devices', type=str, default=None, 
-                      help='指定测试设备，用逗号分隔 (例如: cuda:0,tianshu:1)')
-    parser.add_argument('--verbose', action='store_true', 
-                      help='显示详细测试信息')
-    return parser.parse_args()
+_TEST_CASES = [
+    # input_shape, output_shape, dim, input_strides, output_strides
+    ((13, 4), (13, 1), 1, (4, 1), (1, 1)),
+    ((13, 4), (1, 4), 0, (10, 1), (10, 1)),
+    ((13, 4, 4), (13, 4, 1), 2, None, None),
+    ((16, 5632), (16, 1), 1, None, None),
+    ((4, 4, 5632), (1, 4, 5632), 0, None, None),
+]
 
-def get_test_devices(args, include_nvidia=True, include_tianshu=True, include_moxi=True):
-   
-    devices = []
-    
-    # 如果指定了设备，则优先使用指定的设备
-    if args.devices:
-        return args.devices.split(',')
-    
-    # 自动检测支持的设备
-    if include_nvidia and torch.cuda.is_available():
-        for i in range(torch.cuda.device_count()):
-            devices.append(f"cuda:{i}")
-    
-   
-    if include_tianshu:
-        # 这里应该是天枢设备的检测逻辑
-        try:
-            # 尝试检测天枢设备的示例代码
-            devices.append("tianshu:0")  # 假设存在天枢设备0
-        except:
-            pass
-    
-    if include_moxi:
-        # 这里应该是摩西设备的检测逻辑
-        try:
-            # 尝试检测摩西设备的示例代码
-            devices.append("moxi:0")  # 假设存在摩西设备0
-        except:
-            pass
-    
-    if not devices:
-        raise RuntimeError("没有找到可用的测试设备")
-    
-    return devices
+# Data types used for testing
+_TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
 
-def test_reduce_max(
+# Tolerance map for different data types
+_TOLERANCE_MAP = {
+    InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+    InfiniDtype.F32: {"atol": 1e-7, "rtol": 1e-7},
+    InfiniDtype.BF16: {"atol": 1e-3, "rtol": 1e-3},
+}
+
+DEBUG = False
+PROFILE = False
+NUM_PRERUN = 10
+NUM_ITERATIONS = 1000
+
+
+def torch_reduce_max(output, input, dim):
+    return torch.max(input, dim, keepdim=True,)[0]
+
+
+def test(
     handle,
-    device,
-    shape,
-    axes,
-    keep_dims,
-    dtype=torch.float16,
-    sync=None
+    device,     
+    input_shape, output_shape, dim, input_strides, output_strides,
+    dtype=InfiniDtype.F32,
+    sync=None,
 ):
-    # 生成测试数据
-    input_tensor = torch.randn(shape, dtype=dtype)
-    expected = torch.max(input_tensor, dim=tuple(axes), keepdim=keep_dims)
+    print(
+        f"Testing reduce_max on {InfiniDeviceNames[device]} with input_shape:{input_shape}, dim:{dim},"
+        f"dtype:{InfiniDtypeNames[dtype]}"
+    )
+    output = TestTensor(
+        output_shape,
+        output_strides,
+        dtype,
+        device,
+    )
 
-    # 初始化InfiniOP张量
-    input_op = TestTensor(shape, dtype=dtype, device=device, data=input_tensor)
-    output_op = TestTensor(expected.shape, dtype=dtype, device=device, mode="zeros")
+    input = TestTensor(
+        input_shape,
+        input_strides,
+        dtype,
+        device,
+    )
 
-    # 创建算子描述符
+    output._torch_tensor = torch_reduce_max(output.torch_tensor(), input.torch_tensor(), dim)
+
+    if sync is not None:
+        sync()
+
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
         LIBINFINIOP.infiniopCreateReduceMaxDescriptor(
             handle,
             ctypes.byref(descriptor),
-            output_op.descriptor,
-            input_op.descriptor,
-            axes,
-            len(axes),
-            1 if keep_dims else 0
+			output.descriptor,
+			input.descriptor,
+            dim,
         )
     )
 
-    # 获取工作空间大小
+    # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
+    for tensor in [input, output]:
+        tensor.destroy_desc()
+
     workspace_size = c_uint64(0)
     check_error(
         LIBINFINIOP.infiniopGetReduceMaxWorkspaceSize(
             descriptor, ctypes.byref(workspace_size)
         )
     )
-    workspace = TestWorkspace(workspace_size.value, device)
+    workspace = TestWorkspace(workspace_size.value, output.device)
 
-    # 执行算子
-    check_error(
-        LIBINFINIOP.infiniopReduceMax(
-            descriptor,
-            workspace.data(),
-            workspace_size.value,
-            output_op.data(),
-            input_op.data(),
-            None
+    def lib_reduce_max():
+        check_error(
+            LIBINFINIOP.infiniopReduceMax(
+                descriptor,
+                workspace.data(),
+                workspace.size(),
+                output.data(),
+                input.data(),
+                None,
+            )
         )
-    )
 
-    # 验证结果
-    atol, rtol = get_tolerance(dtype, device)
-    assert torch.allclose(output_op.actual_tensor(), expected, atol=atol, rtol=rtol)
+    lib_reduce_max()
 
-    # 销毁资源
+    atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
+    if DEBUG:
+        debug(output.actual_tensor(), output.torch_tensor(), atol=atol, rtol=rtol)
+
+    assert torch.allclose(output.actual_tensor(), output.torch_tensor(), atol=atol, rtol=rtol)
+
+    # Profiling workflow
+    if PROFILE:
+        # fmt: off
+        profile_operation("PyTorch", lambda: torch_reduce_max(
+            output.torch_tensor(), input.torch_tensor(), dim
+        ), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("    lib", lambda: lib_reduce_max(), device, NUM_PRERUN, NUM_ITERATIONS)
+        # fmt: on
     check_error(LIBINFINIOP.infiniopDestroyReduceMaxDescriptor(descriptor))
+
 
 if __name__ == "__main__":
     args = get_args()
-    # 测试用例覆盖不同形状和轴
-    test_cases = [
-        ((2, 3, 4), (0,), True),
-        ((5, 5), (0, 1), False),
-        ((2, 2, 2, 2), (1, 3), True),
-    ]
-    # 支持的设备类型
-    for device in get_test_devices(args, include_nvidia=True, include_tianshu=True, include_moxi=True):
-        test_operator(device, test_reduce_max, test_cases, [torch.float16, torch.float32])
-    print("\033[92mAll tests passed!\033[0m")
-    
+
+    # Configure testing options
+    DEBUG = args.debug
+    PROFILE = args.profile
+    NUM_PRERUN = args.num_prerun
+    NUM_ITERATIONS = args.num_iterations
+
+    for device in get_test_devices(args):
+        test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
+
+    print("\033[92mTest my ReduceMax passed!\033[0m")
