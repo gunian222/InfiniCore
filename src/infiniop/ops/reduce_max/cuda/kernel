@@ -1,0 +1,36 @@
+#ifndef __REDUCE_MAX_KERNEL_CUH__
+#define __REDUCE_MAX_KERNEL_CUH__
+
+template <unsigned int BLOCK_SIZE, typename Tdata>
+__device__ void reduceMaxKernel(
+    Tdata *y_, const Tdata *x_,
+    size_t batch, size_t height, size_t width,
+    ptrdiff_t y_stride_b, ptrdiff_t y_stride_h,
+    ptrdiff_t x_stride_b, ptrdiff_t x_stride_h)
+{
+    // 约定：gridDim = (height, batch), blockDim = (BLOCK_SIZE)
+    // blockIdx.y -> batch_id, blockIdx.x -> row_id（即height维）
+    // y 指向该行的输出（标量），x 指向该行的输入（长度为 width 的一行）
+    Tdata *y = y_                       // threadIdx.x 不用于寻址输出
+             + blockIdx.y * y_stride_b  // batch 偏移
+             + blockIdx.x * y_stride_h; // 行偏移（height 维）
+    const Tdata *x = x_
+                   + blockIdx.y * x_stride_b
+                   + blockIdx.x * x_stride_h;
+
+    // [Reduce] 计算该行的最大值
+    // 依赖你已有的 reduce 基元：op::common_cuda::reduce_op::max<BLOCK_SIZE, Tdata>(ptr, len)
+    __shared__ Tdata row_max_;
+    Tdata local_max = op::common_cuda::reduce_op::max<BLOCK_SIZE, Tdata>(x, width);
+    if (threadIdx.x == 0) {
+        row_max_ = local_max;
+    }
+    __syncthreads();
+
+    // [Write] 仅由 0 号线程写出该行的 reduce_max 结果
+    if (threadIdx.x == 0) {
+        y[0] = row_max_;
+    }
+}
+
+#endif // __REDUCE_MAX_KERNEL_CUH__
